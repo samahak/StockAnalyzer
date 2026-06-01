@@ -23,32 +23,48 @@ st.title("📈 미국 주식 데이터 대시보드")
 st.markdown("---")
 
 # 월 선택 섹션
-col1, col2, col3, col4, col5 = st.columns([1, 1, 1, 1, 2])
+col1, col2, col3, col4 = st.columns([2, 2, 7, 1])
 
-today = datetime.now()
-current_year = today.year
-current_month = today.month
+@st.cache_data(ttl=3600)
+def get_latest_trading_month():
+    """미국장(SPY 기준)의 가장 최근 거래 연도와 월을 반환합니다."""
+    df_market = fetch_stock_daily("SPY", period="5d")
+    if not df_market.empty:
+        last_date = df_market['Date'].max()
+        return last_date.year, last_date.month
+        
+    # API 오류 등으로 데이터가 없으면 로컬 시간 기준 (월초 1~3일은 보수적으로 전월 반환)
+    today = datetime.now()
+    if today.day <= 3:
+        prev = today.replace(day=1) - timedelta(days=1)
+        return prev.year, prev.month
+    return today.year, today.month
+
+latest_year, latest_month = get_latest_trading_month()
 
 with col1:
     selected_year = st.number_input(
         "연도",
         min_value=2020,
-        max_value=current_year,
-        value=current_year,
+        max_value=latest_year,
+        value=latest_year,
         step=1
     )
+
+max_month = latest_month if selected_year == latest_year else 12
 
 with col2:
     selected_month = st.number_input(
         "월",
         min_value=1,
-        max_value=12,
-        value=current_month,
+        max_value=max_month,
+        value=max_month if selected_year == latest_year else 12,
         step=1
     )
 
-with col3:
-    if st.button("🔄 데이터 로드", width='stretch'):
+with col4:
+    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+    if st.button("🔄", help="데이터 로드", use_container_width=True):
         st.rerun()
 
 # 선택된 월의 시작일과 종료일 계산
@@ -72,19 +88,6 @@ with st.sidebar:
         popular_symbols,
         help="미국 주식 심볼을 선택하세요"
     )
-    
-    # 기간 선택
-    period_options = {
-        "1개월": "1mo",
-        "3개월": "3mo",
-        "6개월": "6mo",
-        "1년": "1y",
-        "2년": "2y",
-        "5년": "5y",
-        "전체": "max"
-    }
-    period_label = st.selectbox("조회 기간", list(period_options.keys()))
-    period = period_options[period_label]
     
     st.markdown("---")
     st.markdown("### 📝 사용자 지정")
@@ -111,7 +114,7 @@ with st.spinner(f"'{symbol}' 데이터를 불러오는 중..."):
 
 # 거래 없는 날(Volume 0) 제거
 if not df.empty:
-    df['Date'] = pd.to_datetime(df['Date']).dt.normalize()
+    df['Date'] = pd.to_datetime(df['Date']).dt.normalize().dt.tz_localize(None)
     df = df[df['Volume'] > 0].copy()
     df = df.drop_duplicates(subset=['Date'], keep='last').sort_values('Date').reset_index(drop=True)
 
@@ -200,16 +203,15 @@ with tab1:
     
     fig.update_layout(
         title=f"{symbol} 일별 캔들차트",
-        xaxis_title="날짜",
         yaxis_title="가격 ($)",
         yaxis=dict(range=[y_min, y_max]),
         hovermode='x unified',
         height=420,
         template='plotly_white',
-        margin=dict(l=60, r=20, t=40, b=20),
+        margin=dict(l=60, r=20, t=40, b=0),
         xaxis=dict(
             type='category',
-            tickangle=-45,
+            showticklabels=False,
             showgrid=False,
             rangeslider=dict(visible=False)
         )
@@ -233,15 +235,14 @@ with tab1:
         ))
         fig_vol.update_layout(
             title='',
-            xaxis_title="날짜",
             yaxis_title="거래량",
             hovermode='x unified',
-            height=260,
+            height=100,
             template='plotly_white',
-            margin=dict(l=60, r=20, t=30, b=20),
+            margin=dict(l=60, r=20, t=10, b=0),
             xaxis=dict(
                 type='category',
-                tickangle=-45,
+                showticklabels=False,
                 showgrid=False
             )
         )
@@ -292,9 +293,9 @@ with tab1:
         yaxis_title="RSI",
         yaxis=dict(range=[0, 100], tickfont=dict(size=12), title=dict(font=dict(size=14))),
         hovermode='x unified',
-        height=350,
+        height=300,
         template='plotly_white',
-        margin=dict(l=60, r=140, t=30, b=20),
+        margin=dict(l=60, r=140, t=10, b=20),
         xaxis=dict(
             type='category',
             tickangle=-45,

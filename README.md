@@ -1,17 +1,24 @@
 # Yahoo Finance API를 이용한 미국 주식 데이터 수집
 
-미국 주식 일단위 가격 데이터를 Yahoo Finance API를 통해 가져오는 Python 프로젝트입니다.
+미국 주식 일단위 가격 데이터를 Yahoo Finance API를 통해 가져오는 Python 프로젝트입니다. 
+데이터 수집을 위한 백엔드 모듈과 시각화를 위한 Streamlit 기반의 웹 대시보드를 제공합니다.
 
 ## 설치
 
-1. **라이브러리 설치**
+1. **가상환경 설정 (권장)**
+```bash
+python -m venv venv
+source venv/bin/activate  # Windows: venv\Scripts\activate
+```
+
+2. **라이브러리 설치**
 ```bash
 pip install -r requirements.txt
 ```
 
 또는 개별 설치:
 ```bash
-pip install yfinance pandas requests
+pip install yfinance pandas requests streamlit plotly
 ```
 
 ## 사용 방법
