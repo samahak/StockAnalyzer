@@ -20,6 +20,7 @@ st.set_page_config(
 
 # 제목
 st.title("📈 미국 주식 데이터 대시보드")
+company_name_placeholder = st.empty()
 st.markdown("---")
 
 # 월 선택 섹션
@@ -81,25 +82,44 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    # 주식 심볼 선택
-    popular_symbols = ["AAPL", "GOOGL", "MSFT", "AMZN", "TSLA", "META", "NVDA"]
-    symbol = st.selectbox(
-        "주식 심볼 선택",
-        popular_symbols,
-        help="미국 주식 심볼을 선택하세요"
+    # 심볼 입력 방식 선택
+    input_method = st.radio(
+        "심볼 입력 방식",
+        ["심볼 선택", "직접 입력"],
+        horizontal=True
     )
     
-    st.markdown("---")
-    st.markdown("### 📝 사용자 지정")
-    
-    # 사용자 입력 심볼
-    custom_symbol = st.text_input(
-        "다른 심볼 입력 (선택)",
-        placeholder="예: NFLX, ZOOM"
-    )
-    
-    if custom_symbol:
-        symbol = custom_symbol.upper()
+    if input_method == "심볼 선택":
+        top_100_symbols = [
+            "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK-B", "LLY", "TSLA", "AVGO",
+            "JPM", "UNH", "V", "XOM", "JNJ", "MA", "PG", "HD", "COST", "MRK",
+            "ABBV", "CRM", "CVX", "AMD", "NFLX", "PEP", "KO", "BAC", "WMT", "TMO",
+            "LIN", "MCD", "ADBE", "DIS", "CSCO", "ACN", "ABT", "INTU", "QCOM", "WFC",
+            "DHR", "GE", "IBM", "CAT", "NOW", "TXN", "VZ", "AMGN", "COP", "PM",
+            "PFE", "ISRG", "SPGI", "BA", "UNP", "HON", "NKE", "SYK", "RTX", "GS",
+            "LOW", "PLD", "BKNG", "ELV", "MS", "T", "BLK", "DE", "INTC", "MDT",
+            "VRTX", "REGN", "AMT", "LMT", "ADP", "MMC", "CB", "PANW", "CI", "TMUS",
+            "BSX", "PGR", "SCHW", "ETN", "CMCSA", "C", "FI", "MU", "ZTS", "KLAC",
+            "NEE", "LRCX", "SNPS", "CDNS", "TJX", "WM", "SHW", "GD", "MO", "SO"
+        ]
+        popular_symbols = sorted(top_100_symbols)
+        symbol = st.selectbox(
+            "주식 심볼 선택",
+            popular_symbols,
+            help="미국 주식 심볼을 선택하세요"
+        )
+    else:
+        custom_symbol = st.text_input(
+            "주식 심볼 직접 입력",
+            placeholder="예: NFLX, ZM",
+            help="심볼을 입력하고 Enter를 누르세요"
+        )
+        
+        if custom_symbol.strip():
+            symbol = custom_symbol.strip().upper()
+        else:
+            st.info("💡 조회할 미국 주식 심볼을 입력해주세요.")
+            st.stop()
 
 # 데이터 로딩
 lookback_days = 45
@@ -111,6 +131,15 @@ with st.spinner(f"'{symbol}' 데이터를 불러오는 중..."):
         end_date=last_day.strftime('%Y-%m-%d')
     )
     info = get_stock_info(symbol)
+
+# 상단 타이틀 아래에 회사명 표시
+if info:
+    # 정보가 없는 경우('N/A') 심볼 이름으로 대체하여 깔끔하게 표시
+    comp_name = info.get('company_name', symbol)
+    comp_name = symbol if comp_name == 'N/A' else comp_name
+    company_name_placeholder.subheader(f"🏢 {comp_name} ({symbol})")
+else:
+    company_name_placeholder.subheader(f"🏢 {symbol}")
 
 # 거래 없는 날(Volume 0) 제거
 if not df.empty:
@@ -127,49 +156,6 @@ if not df.empty:
 if df.empty:
     st.error(f"❌ '{symbol}'의 데이터를 불러올 수 없습니다. 심볼을 확인하세요.")
     st.stop()
-
-# 메인 컨텐츠
-col1, col2, col3, col4 = st.columns(4)
-
-with col1:
-    final_price = df['Close'].iloc[-1]
-    prev_close_index = max(0, len(df) - 5)
-    prev_close = df['Close'].iloc[prev_close_index]
-    st.metric(
-        "최종 가격",
-        f"${final_price:.2f}",
-        delta=f"${final_price - prev_close:.2f}"
-    )
-
-with col2:
-    high_price = df['High'].max()
-    st.metric("최고가 (기간)", f"${high_price:.2f}")
-
-with col3:
-    low_price = df['Low'].min()
-    st.metric("최저가 (기간)", f"${low_price:.2f}")
-
-with col4:
-    avg_volume = df['Volume'].mean()
-    st.metric("평균 거래량", f"{avg_volume:,.0f}")
-
-st.markdown("---")
-
-# 주식 정보 표시
-if info:
-    st.subheader(f"{info.get('company_name', symbol)}")
-    info_cols = st.columns(3)
-    
-    with info_cols[0]:
-        st.write(f"**섹터:** {info.get('sector', 'N/A')}")
-    
-    with info_cols[1]:
-        st.write(f"**산업:** {info.get('industry', 'N/A')}")
-    
-    with info_cols[2]:
-        st.write(f"**시가총액:** {info.get('market_cap', 'N/A'):,}")
-    
-    st.markdown("---")
 
 # 차트 탭
 tab1, tab2 = st.tabs(["📊 주식 분석", "📋 데이터 테이블"])
@@ -305,6 +291,50 @@ with tab1:
     
     st.plotly_chart(fig_rsi, width='stretch')
     
+    # 메인 컨텐츠
+    col1, col2, col3, col4 = st.columns(4)
+
+    with col1:
+        final_price = df['Close'].iloc[-1]
+        prev_close_index = max(0, len(df) - 5)
+        prev_close = df['Close'].iloc[prev_close_index]
+        st.metric(
+            "최종 가격",
+            f"${final_price:.2f}",
+            delta=f"${final_price - prev_close:.2f}"
+        )
+
+    with col2:
+        high_price = df['High'].max()
+        st.metric("최고가 (기간)", f"${high_price:.2f}")
+
+    with col3:
+        low_price = df['Low'].min()
+        st.metric("최저가 (기간)", f"${low_price:.2f}")
+
+    with col4:
+        avg_volume = df['Volume'].mean()
+        st.metric("평균 거래량", f"{avg_volume:,.0f}")
+
+    st.markdown("---")
+
+    # 주식 정보 표시
+    if info:
+        info_cols = st.columns(3)
+        
+        with info_cols[0]:
+            st.write(f"**섹터:** {info.get('sector', 'N/A')}")
+        
+        with info_cols[1]:
+            st.write(f"**산업:** {info.get('industry', 'N/A')}")
+        
+        with info_cols[2]:
+            market_cap = info.get('market_cap', 'N/A')
+            market_cap_display = f"{market_cap:,}" if isinstance(market_cap, (int, float)) else market_cap
+            st.write(f"**시가총액:** {market_cap_display}")
+        
+        st.markdown("---")
+
     # 통계
     col1, col2, col3 = st.columns(3)
     
