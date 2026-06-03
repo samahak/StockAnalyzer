@@ -9,6 +9,7 @@ import plotly.graph_objects as go
 from stock_fetcher import fetch_stock_daily, get_stock_info
 from datetime import datetime, timedelta
 import calendar
+import streamlit.components.v1 as components
 
 # 페이지 설정
 st.set_page_config(
@@ -17,6 +18,70 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+PASSWORD_HASH = "P@ssw0rd"  # 실제 배포 시에는 안전한 방식으로 관리하세요
+
+# 비밀번호 인증
+if 'authenticated' not in st.session_state:
+    st.session_state['authenticated'] = False
+
+if not st.session_state['authenticated']:
+    # 'Press enter to apply' 영문 안내 문구 숨김 CSS 적용
+    st.markdown("""
+        <style>
+        div[data-testid="InputInstructions"] {
+            display: none !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
+    # 화면 중앙 정렬을 위한 3분할 컬럼 사용
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col2:
+        st.title("🔒 로그인")
+        with st.form("login_form"):
+            password = st.text_input("비밀번호를 입력하세요", type="password", max_chars=20)
+            submit_button = st.form_submit_button("로그인", use_container_width=True)
+            
+            if submit_button:
+                if password == PASSWORD_HASH:
+                    st.session_state['authenticated'] = True
+                    st.rerun()
+                else:
+                    st.error("❌ 비밀번호가 일치하지 않습니다.")
+                    
+                    # 입력창 수정(타이핑) 시 즉시 에러를 숨기기 위한 자바스크립트 주입
+                    # (Streamlit DOM 재사용으로 인한 렌더링 오류를 막기 위해 f-string과 고유값 추가, display 상태 초기화)
+                    components.html(
+                        f"""
+                        <script>
+                        // {datetime.now().timestamp()}
+                        const doc = window.parent.document;
+                        
+                        // 이전 이벤트로 인해 display:none 된 DOM이 재사용되었을 수 있으므로 강제 초기화
+                        const alerts = doc.querySelectorAll('[data-testid="stAlert"]');
+                        alerts.forEach(alert => {{
+                            if (alert.innerText.includes('비밀번호가 일치하지 않습니다')) {{
+                                alert.style.display = ''; 
+                            }}
+                        }});
+                        
+                        const pwdInput = doc.querySelector('input[type="password"]');
+                        if (pwdInput && !pwdInput.dataset.listenerAttached) {{
+                            pwdInput.addEventListener('input', function() {{
+                                const currentAlerts = doc.querySelectorAll('[data-testid="stAlert"]');
+                                currentAlerts.forEach(a => {{
+                                    if (a.innerText.includes('비밀번호가 일치하지 않습니다')) {{
+                                        a.style.display = 'none';
+                                    }}
+                                }});
+                            }});
+                            pwdInput.dataset.listenerAttached = 'true';
+                        }}
+                        </script>
+                        """, height=0, width=0
+                    )
+    st.stop()
 
 # 제목
 st.title("📈 미국 주식 데이터 대시보드")
@@ -82,9 +147,9 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    # 심볼 입력 방식 선택
+    # 입력 방식 선택
     input_method = st.radio(
-        "심볼 입력 방식",
+        "입력 방식 선택",
         ["심볼 선택", "직접 입력"],
         horizontal=True
     )
