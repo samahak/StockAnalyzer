@@ -19,11 +19,12 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-PASSWORD_HASH = "P@ssw0rd"  # 실제 배포 시에는 안전한 방식으로 관리하세요
+DEFAULT_AUTH = True
+DEFAULT_PASSWORD = "P@ssw0rd"  # 실제 배포 시에는 안전한 방식으로 관리하세요
 
 # 비밀번호 인증
 if 'authenticated' not in st.session_state:
-    st.session_state['authenticated'] = False
+    st.session_state['authenticated'] = DEFAULT_AUTH
 
 if not st.session_state['authenticated']:
     # 'Press enter to apply' 영문 안내 문구 숨김 CSS 적용
@@ -44,7 +45,7 @@ if not st.session_state['authenticated']:
             submit_button = st.form_submit_button("로그인", use_container_width=True)
             
             if submit_button:
-                if password == PASSWORD_HASH:
+                if password == DEFAULT_PASSWORD:
                     st.session_state['authenticated'] = True
                     st.rerun()
                 else:
