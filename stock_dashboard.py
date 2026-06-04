@@ -115,17 +115,18 @@ if st.session_state['show_help']:
 
     **2. 📅 기간 설정 및 RSI 변동 매매 신호 (화면 상단)**
     * **연도/월 선택**: 특정 연도와 월을 선택하여 해당 기간의 데이터를 집중적으로 분석할 수 있습니다.
-    * **RSI 차이값 & 비교 기간**: 차트 상에 표시될 **매수/매도 마커(세모 기호)**의 기준이 됩니다.
-        * *예) 비교 기간 `1`일, RSI 차이값 `10` 설정 시:* 이전 날짜(1일 전) 대비 RSI가 10 이상 하락하면 매수 신호(초록색 상향 세모), 10 이상 상승하면 매도 신호(검은색 하향 세모)가 표시됩니다.
+    * **RSI 차이값 & RSI 비교기간(일)**: 차트 상에 표시될 **매수/매도 마커(세모 기호)**의 기준이 됩니다.
+        * *예) 비교기간 `1`일, RSI 차이값 `5` 설정 시:* 이전 날짜(1일 전) 대비 RSI가 5 이상 하락하면 매수 신호(초록색 상향 세모), 5 이상 상승하면 매도 신호(검은색 하향 세모)가 표시됩니다.
 
     **3. ⚙️ 종목 및 지표 설정 (좌측 사이드바)**
-    * **종목 선택**: 미국 주식 시가총액 상위 100대 기업을 리스트에서 바로 선택하거나, 조회하고 싶은 티커(예: TSLA, NFLX)를 직접 입력할 수 있습니다.
+    * **종목 선택**: 입력 방식을 선택하여, 미국 주식 시가총액 상위 100대 기업을 리스트에서 바로 선택하거나 조회하고 싶은 티커(예: NFLX, ZM)를 직접 입력할 수 있습니다.
     * **RSI 매매 신호 설정**: 하단 RSI 차트에 표시될 과매수/과매도 기준선(점선)을 설정하여 현재 주식의 상태를 판단합니다. (기본값: 과매수 70, 과매도 30)
 
     **4. 📊 차트 및 상세 데이터 (메인 화면)**
-    * **📊 주식 차트 탭**: 
+    * **📊 주식 분석 탭**: 
         * 상단부터 **캔들차트, 거래량 바 차트, RSI 선 차트** 순으로 배치되어 있습니다.
         * 캔들이나 차트 마커에 마우스를 올리면 각 일자별 상세 수치와 RSI 변동폭 등을 툴팁으로 확인할 수 있습니다.
+        * 차트 하단에서 최고/최저가, 평균 거래량, 시가총액 등의 주식 기본 정보와 RSI 추세, 변동률 통계를 제공합니다.
     * **📋 데이터 테이블 탭**: 
         * 일자별 가격/거래량/RSI 상세 데이터를 표 형태로 확인하고, `CSV 다운로드` 버튼을 통해 엑셀 등 외부 프로그램에서 활용할 수 있습니다.
     """)
@@ -139,7 +140,11 @@ with col_btn:
     st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
     if st.button("사용법", use_container_width=True, help="대시보드 사용 설명서 보기"):
         # 화면이 전환되면서 Streamlit이 숨겨진 위젯의 값을 초기화하는 것을 방지하기 위해 현재 상태 백업
-        st.session_state['saved_state'] = {k: v for k, v in st.session_state.items() if k.startswith('ui_')}
+        saved_state = {}
+        for key, value in st.session_state.items():
+            if isinstance(key, str) and key.startswith('ui_'):
+                saved_state[key] = value
+        st.session_state['saved_state'] = saved_state
         st.session_state['show_help'] = True
         st.rerun()
 
@@ -147,7 +152,7 @@ company_name_placeholder = st.empty()
 st.markdown("---")
 
 # 월 선택 섹션
-col1, col2, col3, col4, col5, _ = st.columns([2, 2, 1.5, 1.5, 0.8, 3.2])
+col1, col2, col3, col4, _ = st.columns([2, 2, 1.5, 1.5, 4.0])
 
 @st.cache_data(ttl=3600)
 def get_latest_trading_month():
@@ -214,18 +219,13 @@ with col3:
 
 with col4:
     rsi_diff_period = st.number_input(
-        "비교 기간 (일)",
+        "RSI 비교기간(일)",
         min_value=1,
         max_value=14,
         step=1,
-        help="1~14일 사이의 차이를 비교할 기간을 입력하세요",
+        help="1~14일 사이의 비교할 기간을 입력하세요",
         key='ui_rsi_diff_period'
     )
-
-with col5:
-    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
-    if st.button("🔄", help="데이터 로드", use_container_width=True):
-        st.rerun()
 
 # 선택된 월의 시작일과 종료일 계산
 first_day = datetime(selected_year, selected_month, 1)
