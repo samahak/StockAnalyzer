@@ -85,8 +85,64 @@ if not st.session_state['authenticated']:
                     )
     st.stop()
 
-# 제목
-st.title("📈 미국 주식 데이터 알람")
+# 입력 상태 유지를 위한 딕셔너리 초기화
+if 'saved_state' not in st.session_state:
+    st.session_state['saved_state'] = {}
+
+# 사용법(도움말) 페이지 표시 여부 상태 관리
+if 'show_help' not in st.session_state:
+    st.session_state['show_help'] = False
+
+# 사용 설명서 화면 렌더링
+if st.session_state['show_help']:
+    col_title, col_btn = st.columns([9, 1])
+    with col_title:
+        st.title("📖 대시보드 사용 설명서")
+    with col_btn:
+        st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+        if st.button("❌ 닫기", use_container_width=True, help="메인 화면으로 돌아가기"):
+            st.session_state['show_help'] = False
+            # 메인 화면으로 돌아가기 전, 저장해둔 UI 상태 값들을 강제로 복구
+            for k, v in st.session_state['saved_state'].items():
+                st.session_state[k] = v
+            st.rerun()
+            
+    st.markdown("""
+    ### 📌 주요 기능 안내
+
+    **1. 🔒 로그인**
+    * 초기 기본 비밀번호는 `P@ssw0rd`로 설정되어 있습니다. (보안을 위해 필요 시 소스코드 내 비밀번호 수정 가능)
+
+    **2. 📅 기간 설정 및 RSI 변동 매매 신호 (화면 상단)**
+    * **연도/월 선택**: 특정 연도와 월을 선택하여 해당 기간의 데이터를 집중적으로 분석할 수 있습니다.
+    * **RSI 차이값 & 비교 기간**: 차트 상에 표시될 **매수/매도 마커(세모 기호)**의 기준이 됩니다.
+        * *예) 비교 기간 `1`일, RSI 차이값 `10` 설정 시:* 이전 날짜(1일 전) 대비 RSI가 10 이상 하락하면 매수 신호(초록색 상향 세모), 10 이상 상승하면 매도 신호(검은색 하향 세모)가 표시됩니다.
+
+    **3. ⚙️ 종목 및 지표 설정 (좌측 사이드바)**
+    * **종목 선택**: 미국 주식 시가총액 상위 100대 기업을 리스트에서 바로 선택하거나, 조회하고 싶은 티커(예: TSLA, NFLX)를 직접 입력할 수 있습니다.
+    * **RSI 매매 신호 설정**: 하단 RSI 차트에 표시될 과매수/과매도 기준선(점선)을 설정하여 현재 주식의 상태를 판단합니다. (기본값: 과매수 70, 과매도 30)
+
+    **4. 📊 차트 및 상세 데이터 (메인 화면)**
+    * **📊 주식 차트 탭**: 
+        * 상단부터 **캔들차트, 거래량 바 차트, RSI 선 차트** 순으로 배치되어 있습니다.
+        * 캔들이나 차트 마커에 마우스를 올리면 각 일자별 상세 수치와 RSI 변동폭 등을 툴팁으로 확인할 수 있습니다.
+    * **📋 데이터 테이블 탭**: 
+        * 일자별 가격/거래량/RSI 상세 데이터를 표 형태로 확인하고, `CSV 다운로드` 버튼을 통해 엑셀 등 외부 프로그램에서 활용할 수 있습니다.
+    """)
+    st.stop() # 사용 설명서 페이지 활성화 시 기존 메인 화면 렌더링 중지
+
+# 메인 화면 제목
+col_title, col_btn = st.columns([9, 1])
+with col_title:
+    st.title("📈 미국 주식 데이터 알람")
+with col_btn:
+    st.markdown("<div style='margin-top: 10px;'></div>", unsafe_allow_html=True)
+    if st.button("사용법", use_container_width=True, help="대시보드 사용 설명서 보기"):
+        # 화면이 전환되면서 Streamlit이 숨겨진 위젯의 값을 초기화하는 것을 방지하기 위해 현재 상태 백업
+        st.session_state['saved_state'] = {k: v for k, v in st.session_state.items() if k.startswith('ui_')}
+        st.session_state['show_help'] = True
+        st.rerun()
+
 company_name_placeholder = st.empty()
 st.markdown("---")
 
@@ -110,24 +166,40 @@ def get_latest_trading_month():
 
 latest_year, latest_month = get_latest_trading_month()
 
+if 'ui_selected_year' not in st.session_state:
+    st.session_state['ui_selected_year'] = latest_year
+
+if 'ui_selected_month' not in st.session_state:
+    st.session_state['ui_selected_month'] = latest_month
+
+if 'ui_rsi_diff_value' not in st.session_state:
+    st.session_state['ui_rsi_diff_value'] = 5
+
+if 'ui_rsi_diff_period' not in st.session_state:
+    st.session_state['ui_rsi_diff_period'] = 1
+
 with col1:
     selected_year = st.number_input(
         "연도",
         min_value=2020,
         max_value=latest_year,
-        value=latest_year,
-        step=1
+        step=1,
+        key='ui_selected_year'
     )
 
 max_month = latest_month if selected_year == latest_year else 12
+
+# 만약 현재 세션의 월이 최대 월(max_month)보다 크다면 최대 월로 보정 (연도를 변경할 때 발생 가능)
+if st.session_state['ui_selected_month'] > max_month:
+    st.session_state['ui_selected_month'] = max_month
 
 with col2:
     selected_month = st.number_input(
         "월",
         min_value=1,
         max_value=max_month,
-        value=max_month if selected_year == latest_year else 12,
-        step=1
+        step=1,
+        key='ui_selected_month'
     )
 
 with col3:
@@ -135,9 +207,9 @@ with col3:
         "RSI 차이값",
         min_value=1,
         max_value=30,
-        value=10,
         step=1,
-        help="검증할 RSI 차이값을 입력하세요"
+        help="검증할 RSI 차이값을 입력하세요",
+        key='ui_rsi_diff_value'
     )
 
 with col4:
@@ -145,9 +217,9 @@ with col4:
         "비교 기간 (일)",
         min_value=1,
         max_value=14,
-        value=1,
         step=1,
-        help="1~14일 사이의 차이를 비교할 기간을 입력하세요"
+        help="1~14일 사이의 차이를 비교할 기간을 입력하세요",
+        key='ui_rsi_diff_period'
     )
 
 with col5:
@@ -169,11 +241,16 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ 설정")
     
+    default_input_method = st.session_state['saved_state'].get('ui_input_method', "심볼 선택")
+    method_idx = 0 if default_input_method == "심볼 선택" else 1
+    
     # 입력 방식 선택
     input_method = st.radio(
         "입력 방식 선택",
         ["심볼 선택", "직접 입력"],
-        horizontal=True
+        index=method_idx,
+        horizontal=True,
+        key='ui_input_method'
     )
     
     if input_method == "심볼 선택":
@@ -190,16 +267,23 @@ with st.sidebar:
             "NEE", "LRCX", "SNPS", "CDNS", "TJX", "WM", "SHW", "GD", "MO", "SO"
         ]
         popular_symbols = sorted(top_100_symbols)
+        default_symbol = st.session_state['saved_state'].get('ui_symbol', popular_symbols[0])
+        symbol_idx = popular_symbols.index(default_symbol) if default_symbol in popular_symbols else 0
         symbol = st.selectbox(
             "주식 심볼 선택",
             popular_symbols,
-            help="미국 주식 심볼을 선택하세요"
+            index=symbol_idx,
+            help="미국 주식 심볼을 선택하세요",
+            key='ui_symbol'
         )
     else:
+        default_custom = st.session_state['saved_state'].get('ui_custom_symbol', "")
         custom_symbol = st.text_input(
             "주식 심볼 직접 입력",
+            value=default_custom,
             placeholder="예: NFLX, ZM",
-            help="심볼을 입력하고 Enter를 누르세요"
+            help="심볼을 입력하고 Enter를 누르세요",
+            key='ui_custom_symbol'
         )
         
         if custom_symbol.strip():
@@ -210,8 +294,12 @@ with st.sidebar:
             
     st.markdown("---")
     st.header("📊 RSI 매매 신호 설정")
-    rsi_buy_threshold = st.number_input("매수 RSI 기준 (이하 하락 시)", min_value=1, max_value=100, value=30, step=1)
-    rsi_sell_threshold = st.number_input("매도 RSI 기준 (이상 상승 시)", min_value=1, max_value=100, value=70, step=1)
+    
+    default_buy = st.session_state['saved_state'].get('ui_rsi_buy', 30)
+    rsi_buy_threshold = st.number_input("매수 RSI 기준 (이하 하락 시)", min_value=1, max_value=100, value=default_buy, step=1, key='ui_rsi_buy')
+    
+    default_sell = st.session_state['saved_state'].get('ui_rsi_sell', 70)
+    rsi_sell_threshold = st.number_input("매도 RSI 기준 (이상 상승 시)", min_value=1, max_value=100, value=default_sell, step=1, key='ui_rsi_sell')
 
 # 데이터 로딩
 lookback_days = 45
@@ -390,7 +478,7 @@ with tab1:
         xref='paper',
         y=current_rsi,
         yref='y',
-        text=f"현재 RSI {current_rsi:.2f}",
+        text=f"RSI값 {current_rsi:.2f}",
         showarrow=False,
         xanchor='left',
         font=dict(size=14, color='black')
