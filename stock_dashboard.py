@@ -10,6 +10,7 @@ from stock_fetcher import fetch_stock_daily, get_stock_info
 from datetime import datetime, timedelta
 import calendar
 import streamlit.components.v1 as components
+import numpy as np
 
 # 페이지 설정
 st.set_page_config(
@@ -85,12 +86,12 @@ if not st.session_state['authenticated']:
     st.stop()
 
 # 제목
-st.title("📈 미국 주식 데이터 대시보드")
+st.title("📈 미국 주식 데이터 알람")
 company_name_placeholder = st.empty()
 st.markdown("---")
 
 # 월 선택 섹션
-col1, col2, col3, col4 = st.columns([2, 2, 7, 1])
+col1, col2, col3, col4, col5, _ = st.columns([2, 2, 1.5, 1.5, 0.8, 3.2])
 
 @st.cache_data(ttl=3600)
 def get_latest_trading_month():
@@ -129,7 +130,27 @@ with col2:
         step=1
     )
 
+with col3:
+    rsi_diff_value = st.number_input(
+        "RSI 차이값",
+        min_value=1,
+        max_value=30,
+        value=10,
+        step=1,
+        help="검증할 RSI 차이값을 입력하세요"
+    )
+
 with col4:
+    rsi_diff_period = st.number_input(
+        "비교 기간 (일)",
+        min_value=1,
+        max_value=14,
+        value=1,
+        step=1,
+        help="1~14일 사이의 차이를 비교할 기간을 입력하세요"
+    )
+
+with col5:
     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
     if st.button("🔄", help="데이터 로드", use_container_width=True):
         st.rerun()
@@ -186,6 +207,11 @@ with st.sidebar:
         else:
             st.info("💡 조회할 미국 주식 심볼을 입력해주세요.")
             st.stop()
+            
+    st.markdown("---")
+    st.header("📊 RSI 매매 신호 설정")
+    rsi_buy_threshold = st.number_input("매수 RSI 기준 (이하 하락 시)", min_value=1, max_value=100, value=30, step=1)
+    rsi_sell_threshold = st.number_input("매도 RSI 기준 (이상 상승 시)", min_value=1, max_value=100, value=70, step=1)
 
 # 데이터 로딩
 lookback_days = 45
@@ -212,6 +238,9 @@ if not df.empty:
     df['Date'] = pd.to_datetime(df['Date']).dt.normalize().dt.tz_localize(None)
     df = df[df['Volume'] > 0].copy()
     df = df.drop_duplicates(subset=['Date'], keep='last').sort_values('Date').reset_index(drop=True)
+    df['Prev_RSI'] = df['RSI'].shift(1)
+    df['Prev_Period_RSI'] = df['RSI'].shift(int(rsi_diff_period))
+    df['RSI_Change'] = df['RSI'] - df['Prev_Period_RSI']
 
 # 선택한 월 데이터만 표시
 if not df.empty:
@@ -235,8 +264,8 @@ with tab1:
     price_range = price_max - price_min
     
     # y축 범위 설정 (상하한가 기준)
-    y_min = price_min - (price_range * 0.05)
-    y_max = price_max + (price_range * 0.05)
+    y_min = price_min - (price_range * 0.1)
+    y_max = price_max + (price_range * 0.1)
     
     # 캔들스틱 차트
     fig = go.Figure(data=[
@@ -252,6 +281,34 @@ with tab1:
             hovertemplate='<b>%{x}</b><br>Open: %{open:.2f}<br>High: %{high:.2f}<br>Low: %{low:.2f}<br>Close: %{close:.2f}<extra></extra>'
         )
     ])
+    
+    # 매매 신호 계산 (입력한 비교 기간 대비 RSI 변동폭 기준)
+    buy_signals = df[df['RSI_Change'] <= -rsi_diff_value]
+    sell_signals = df[df['RSI_Change'] >= rsi_diff_value]
+    
+    # 매수 신호 표시 (캔들 하단)
+    if not buy_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=buy_signals['DateLabel'],
+            y=buy_signals['Low'] - (price_range * 0.03),
+            mode='markers',
+            marker=dict(symbol='triangle-up', size=14, color='green', line=dict(width=1, color='darkgreen')),
+            name='매수 신호',
+            hovertemplate='<b>매수 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
+            customdata=np.stack((buy_signals['RSI'], buy_signals['RSI_Change']), axis=-1)
+        ))
+        
+    # 매도 신호 표시 (캔들 상단)
+    if not sell_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=sell_signals['DateLabel'],
+            y=sell_signals['High'] + (price_range * 0.03),
+            mode='markers',
+            marker=dict(symbol='triangle-down', size=14, color='black', line=dict(width=1, color='black')),
+            name='매도 신호',
+            hovertemplate='<b>매도 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
+            customdata=np.stack((sell_signals['RSI'], sell_signals['RSI_Change']), axis=-1)
+        ))
     
     fig.update_layout(
         title=f"{symbol} 일별 캔들차트",
@@ -316,13 +373,13 @@ with tab1:
         hovertemplate='RSI: %{y:.2f}<extra></extra>'
     ))
     
-    # 과매수선 (70)
-    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", 
-                      annotation_text="과매수 (70)", annotation_position="right")
+    # 매도 기준선
+    fig_rsi.add_hline(y=rsi_sell_threshold, line_dash="dash", line_color="red", 
+                      annotation_text=f"과매수 ({rsi_sell_threshold})", annotation_position="right")
     
-    # 과매도선 (30)
-    fig_rsi.add_hline(y=30, line_dash="dash", line_color="blue",
-                      annotation_text="과매도 (30)", annotation_position="right")
+    # 매수 기준선
+    fig_rsi.add_hline(y=rsi_buy_threshold, line_dash="dash", line_color="blue",
+                      annotation_text=f"과매도 ({rsi_buy_threshold})", annotation_position="right")
     
     # 중간선 (50)
     fig_rsi.add_hline(y=50, line_dash="dot", line_color="gray",
@@ -425,9 +482,9 @@ with tab1:
         st.metric("현재 RSI", f"{current_rsi:.2f}", delta=f"{current_rsi - prev_rsi:.2f}")
     
     with col2:
-        if current_rsi > 70:
+        if current_rsi >= rsi_sell_threshold:
             st.warning("⚠️ 과매수 상태")
-        elif current_rsi < 30:
+        elif current_rsi <= rsi_buy_threshold:
             st.info("ℹ️ 과매도 상태")
         else:
             st.success("✅ 중립 상태")
