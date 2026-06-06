@@ -241,14 +241,13 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ 설정")
     
-    default_input_method = st.session_state['saved_state'].get('ui_input_method', "심볼 선택")
-    method_idx = 0 if default_input_method == "심볼 선택" else 1
+    if 'ui_input_method' not in st.session_state:
+        st.session_state['ui_input_method'] = "심볼 선택"
     
     # 입력 방식 선택
     input_method = st.radio(
         "입력 방식 선택",
         ["심볼 선택", "직접 입력"],
-        index=method_idx,
         horizontal=True,
         key='ui_input_method'
     )
@@ -267,20 +266,22 @@ with st.sidebar:
             "NEE", "LRCX", "SNPS", "CDNS", "TJX", "WM", "SHW", "GD", "MO", "SO"
         ]
         popular_symbols = sorted(top_100_symbols)
-        default_symbol = st.session_state['saved_state'].get('ui_symbol', popular_symbols[0])
-        symbol_idx = popular_symbols.index(default_symbol) if default_symbol in popular_symbols else 0
+        
+        if 'ui_symbol' not in st.session_state:
+            st.session_state['ui_symbol'] = popular_symbols[0]
+            
         symbol = st.selectbox(
             "주식 심볼 선택",
             popular_symbols,
-            index=symbol_idx,
             help="미국 주식 심볼을 선택하세요",
             key='ui_symbol'
         )
     else:
-        default_custom = st.session_state['saved_state'].get('ui_custom_symbol', "")
+        if 'ui_custom_symbol' not in st.session_state:
+            st.session_state['ui_custom_symbol'] = ""
+            
         custom_symbol = st.text_input(
             "주식 심볼 직접 입력",
-            value=default_custom,
             placeholder="예: NFLX, ZM",
             help="심볼을 입력하고 Enter를 누르세요",
             key='ui_custom_symbol'
@@ -295,11 +296,14 @@ with st.sidebar:
     st.markdown("---")
     st.header("📊 RSI 매매 신호 설정")
     
-    default_buy = st.session_state['saved_state'].get('ui_rsi_buy', 30)
-    rsi_buy_threshold = st.number_input("매수 RSI 기준 (이하 하락 시)", min_value=1, max_value=100, value=default_buy, step=1, key='ui_rsi_buy')
+    if 'ui_rsi_buy' not in st.session_state:
+        st.session_state['ui_rsi_buy'] = 30
+        
+    if 'ui_rsi_sell' not in st.session_state:
+        st.session_state['ui_rsi_sell'] = 70
     
-    default_sell = st.session_state['saved_state'].get('ui_rsi_sell', 70)
-    rsi_sell_threshold = st.number_input("매도 RSI 기준 (이상 상승 시)", min_value=1, max_value=100, value=default_sell, step=1, key='ui_rsi_sell')
+    rsi_buy_threshold = st.number_input("매수 RSI 기준 (이하 하락 시)", min_value=1, max_value=100, step=1, key='ui_rsi_buy')
+    rsi_sell_threshold = st.number_input("매도 RSI 기준 (이상 상승 시)", min_value=1, max_value=100, step=1, key='ui_rsi_sell')
 
 # 데이터 로딩
 lookback_days = 45
