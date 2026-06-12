@@ -117,15 +117,17 @@ if st.session_state['show_help']:
     * **연도/월 선택**: 특정 연도와 월을 선택하여 해당 기간의 데이터를 집중적으로 분석할 수 있습니다.
     * **RSI 차이값 & RSI 비교기간(일)**: 차트 상에 표시될 **매수/매도 마커(세모 기호)**의 기준이 됩니다.
         * *예) 비교기간 `1`일, RSI 차이값 `5` 설정 시:* 이전 날짜(1일 전) 대비 RSI가 5 이상 하락하면 매수 신호(초록색 상향 세모), 5 이상 상승하면 매도 신호(검은색 하향 세모)가 표시됩니다.
+        * 설정한 RSI 차이값의 **2배 이상** 변동한 날은 더 크고 진한 **강한 매수/매도 신호**로 표시됩니다.
 
     **3. ⚙️ 종목 및 지표 설정 (좌측 사이드바)**
-    * **종목 선택**: 입력 방식을 선택하여, 미국 주식 시가총액 상위 100대 기업을 리스트에서 바로 선택하거나 조회하고 싶은 티커(예: NFLX, ZM)를 직접 입력할 수 있습니다.
+    * **종목 선택**: 하나의 입력 상자에서 미국 주식 시가총액 상위 100대 기업을 선택하거나, 목록에 없는 티커(예: ZM)를 직접 입력할 수 있습니다.
     * **RSI 매매 신호 설정**: 하단 RSI 차트에 표시될 과매수/과매도 기준선(점선)을 설정하여 현재 주식의 상태를 판단합니다. (기본값: 과매수 70, 과매도 30)
 
     **4. 📊 차트 및 상세 데이터 (메인 화면)**
     * **📊 주식 분석 탭**: 
-        * 상단부터 **캔들차트, 거래량 바 차트, RSI 선 차트** 순으로 배치되어 있습니다.
+        * 상단부터 **캔들차트, 거래량 바 차트, RSI 선 차트** 순으로 배치되어 있으며, 세 차트는 같은 일자 축으로 정렬됩니다.
         * 캔들이나 차트 마커에 마우스를 올리면 각 일자별 상세 수치와 RSI 변동폭 등을 툴팁으로 확인할 수 있습니다.
+        * RSI 차트 아래에서 시작 금액 100만원 기준의 신호 매매 수익률과 매수/매도 횟수를 확인할 수 있습니다.
         * 차트 하단에서 최고/최저가, 평균 거래량, 시가총액 등의 주식 기본 정보와 RSI 추세, 변동률 통계를 제공합니다.
     * **📋 데이터 테이블 탭**: 
         * 일자별 가격/거래량/RSI 상세 데이터를 표 형태로 확인하고, `CSV 다운로드` 버튼을 통해 엑셀 등 외부 프로그램에서 활용할 수 있습니다.
@@ -240,58 +242,35 @@ st.markdown("---")
 # 사이드바 설정
 with st.sidebar:
     st.header("⚙️ 설정")
-    
-    if 'ui_input_method' not in st.session_state:
-        st.session_state['ui_input_method'] = "심볼 선택"
-    
-    # 입력 방식 선택
-    input_method = st.radio(
-        "입력 방식 선택",
-        ["심볼 선택", "직접 입력"],
-        horizontal=True,
-        key='ui_input_method'
+
+    top_100_symbols = [
+        "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK-B", "LLY", "TSLA", "AVGO",
+        "JPM", "UNH", "V", "XOM", "JNJ", "MA", "PG", "HD", "COST", "MRK",
+        "ABBV", "CRM", "CVX", "AMD", "NFLX", "PEP", "KO", "BAC", "WMT", "TMO",
+        "LIN", "MCD", "ADBE", "DIS", "CSCO", "ACN", "ABT", "INTU", "QCOM", "WFC",
+        "DHR", "GE", "IBM", "CAT", "NOW", "TXN", "VZ", "AMGN", "COP", "PM",
+        "PFE", "ISRG", "SPGI", "BA", "UNP", "HON", "NKE", "SYK", "RTX", "GS",
+        "LOW", "PLD", "BKNG", "ELV", "MS", "T", "BLK", "DE", "INTC", "MDT",
+        "VRTX", "REGN", "AMT", "LMT", "ADP", "MMC", "CB", "PANW", "CI", "TMUS",
+        "BSX", "PGR", "SCHW", "ETN", "CMCSA", "C", "FI", "MU", "ZTS", "KLAC",
+        "NEE", "LRCX", "SNPS", "CDNS", "TJX", "WM", "SHW", "GD", "MO", "SO"
+    ]
+    popular_symbols = sorted(top_100_symbols)
+
+    selected_symbol = st.selectbox(
+        "주식 심볼 입력",
+        popular_symbols,
+        help="목록에서 선택하거나, 목록에 없는 미국 주식 심볼을 직접 입력하세요.",
+        key='ui_symbol',
+        accept_new_options=True,
+        placeholder="예: AAPL, NFLX, ZM"
     )
-    
-    if input_method == "심볼 선택":
-        top_100_symbols = [
-            "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK-B", "LLY", "TSLA", "AVGO",
-            "JPM", "UNH", "V", "XOM", "JNJ", "MA", "PG", "HD", "COST", "MRK",
-            "ABBV", "CRM", "CVX", "AMD", "NFLX", "PEP", "KO", "BAC", "WMT", "TMO",
-            "LIN", "MCD", "ADBE", "DIS", "CSCO", "ACN", "ABT", "INTU", "QCOM", "WFC",
-            "DHR", "GE", "IBM", "CAT", "NOW", "TXN", "VZ", "AMGN", "COP", "PM",
-            "PFE", "ISRG", "SPGI", "BA", "UNP", "HON", "NKE", "SYK", "RTX", "GS",
-            "LOW", "PLD", "BKNG", "ELV", "MS", "T", "BLK", "DE", "INTC", "MDT",
-            "VRTX", "REGN", "AMT", "LMT", "ADP", "MMC", "CB", "PANW", "CI", "TMUS",
-            "BSX", "PGR", "SCHW", "ETN", "CMCSA", "C", "FI", "MU", "ZTS", "KLAC",
-            "NEE", "LRCX", "SNPS", "CDNS", "TJX", "WM", "SHW", "GD", "MO", "SO"
-        ]
-        popular_symbols = sorted(top_100_symbols)
-        
-        if 'ui_symbol' not in st.session_state:
-            st.session_state['ui_symbol'] = popular_symbols[0]
-            
-        symbol = st.selectbox(
-            "주식 심볼 선택",
-            popular_symbols,
-            help="미국 주식 심볼을 선택하세요",
-            key='ui_symbol'
-        )
+
+    if selected_symbol and selected_symbol.strip():
+        symbol = selected_symbol.strip().upper()
     else:
-        if 'ui_custom_symbol' not in st.session_state:
-            st.session_state['ui_custom_symbol'] = ""
-            
-        custom_symbol = st.text_input(
-            "주식 심볼 직접 입력",
-            placeholder="예: NFLX, ZM",
-            help="심볼을 입력하고 Enter를 누르세요",
-            key='ui_custom_symbol'
-        )
-        
-        if custom_symbol.strip():
-            symbol = custom_symbol.strip().upper()
-        else:
-            st.info("💡 조회할 미국 주식 심볼을 입력해주세요.")
-            st.stop()
+        st.info("💡 조회할 미국 주식 심볼을 선택하거나 입력해주세요.")
+        st.stop()
             
     st.markdown("---")
     st.header("📊 RSI 매매 신호 설정")
@@ -358,6 +337,9 @@ with tab1:
     # y축 범위 설정 (상하한가 기준)
     y_min = price_min - (price_range * 0.1)
     y_max = price_max + (price_range * 0.1)
+    date_labels = df['DateLabel'].tolist()
+    x_axis_range = [-0.5, len(date_labels) - 0.5]
+    common_chart_margin_r = 140
     
     # 캔들스틱 차트
     fig = go.Figure(data=[
@@ -375,31 +357,76 @@ with tab1:
     ])
     
     # 매매 신호 계산 (입력한 비교 기간 대비 RSI 변동폭 기준)
+    strong_signal_value = rsi_diff_value * 2
     buy_signals = df[df['RSI_Change'] <= -rsi_diff_value]
+    strong_buy_signals = df[df['RSI_Change'] <= -strong_signal_value]
+    normal_buy_signals = buy_signals[buy_signals['RSI_Change'] > -strong_signal_value]
     sell_signals = df[df['RSI_Change'] >= rsi_diff_value]
+    strong_sell_signals = df[df['RSI_Change'] >= strong_signal_value]
+    normal_sell_signals = sell_signals[sell_signals['RSI_Change'] < strong_signal_value]
     
     # 매수 신호 표시 (캔들 하단)
-    if not buy_signals.empty:
+    if not normal_buy_signals.empty:
         fig.add_trace(go.Scatter(
-            x=buy_signals['DateLabel'],
-            y=buy_signals['Low'] - (price_range * 0.03),
+            x=normal_buy_signals['DateLabel'],
+            y=normal_buy_signals['Low'] - (price_range * 0.03),
             mode='markers',
             marker=dict(symbol='triangle-up', size=14, color='green', line=dict(width=1, color='darkgreen')),
             name='매수 신호',
             hovertemplate='<b>매수 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
-            customdata=np.stack((buy_signals['RSI'], buy_signals['RSI_Change']), axis=-1)
+            customdata=np.stack((normal_buy_signals['RSI'], normal_buy_signals['RSI_Change']), axis=-1)
+        ))
+
+    if not strong_buy_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=strong_buy_signals['DateLabel'],
+            y=strong_buy_signals['Low'] - (price_range * 0.06),
+            mode='markers',
+            marker=dict(symbol='triangle-up', size=30, color='rgba(255, 193, 7, 0.75)', line=dict(width=0)),
+            name='강한 매수 강조',
+            hoverinfo='skip',
+            showlegend=False
+        ))
+        fig.add_trace(go.Scatter(
+            x=strong_buy_signals['DateLabel'],
+            y=strong_buy_signals['Low'] - (price_range * 0.06),
+            mode='markers',
+            marker=dict(symbol='triangle-up', size=22, color='#00C853', line=dict(width=3, color='black')),
+            name='강한 매수 신호',
+            hovertemplate='<b>강한 매수 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
+            customdata=np.stack((strong_buy_signals['RSI'], strong_buy_signals['RSI_Change']), axis=-1)
         ))
         
     # 매도 신호 표시 (캔들 상단)
-    if not sell_signals.empty:
+    if not normal_sell_signals.empty:
         fig.add_trace(go.Scatter(
-            x=sell_signals['DateLabel'],
-            y=sell_signals['High'] + (price_range * 0.03),
+            x=normal_sell_signals['DateLabel'],
+            y=normal_sell_signals['High'] + (price_range * 0.03),
             mode='markers',
-            marker=dict(symbol='triangle-down', size=14, color='black', line=dict(width=1, color='black')),
+            marker=dict(symbol='triangle-down', size=14, color='dimgray', line=dict(width=1, color='black')),
             name='매도 신호',
             hovertemplate='<b>매도 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
-            customdata=np.stack((sell_signals['RSI'], sell_signals['RSI_Change']), axis=-1)
+            customdata=np.stack((normal_sell_signals['RSI'], normal_sell_signals['RSI_Change']), axis=-1)
+        ))
+
+    if not strong_sell_signals.empty:
+        fig.add_trace(go.Scatter(
+            x=strong_sell_signals['DateLabel'],
+            y=strong_sell_signals['High'] + (price_range * 0.06),
+            mode='markers',
+            marker=dict(symbol='triangle-down', size=30, color='rgba(255, 193, 7, 0.75)', line=dict(width=0)),
+            name='강한 매도 강조',
+            hoverinfo='skip',
+            showlegend=False
+        ))
+        fig.add_trace(go.Scatter(
+            x=strong_sell_signals['DateLabel'],
+            y=strong_sell_signals['High'] + (price_range * 0.06),
+            mode='markers',
+            marker=dict(symbol='triangle-down', size=22, color='#FF1744', line=dict(width=3, color='black')),
+            name='강한 매도 신호',
+            hovertemplate='<b>강한 매도 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
+            customdata=np.stack((strong_sell_signals['RSI'], strong_sell_signals['RSI_Change']), axis=-1)
         ))
     
     fig.update_layout(
@@ -409,9 +436,12 @@ with tab1:
         hovermode='x unified',
         height=420,
         template='plotly_white',
-        margin=dict(l=60, r=20, t=40, b=0),
+        margin=dict(l=60, r=common_chart_margin_r, t=40, b=0),
         xaxis=dict(
             type='category',
+            categoryorder='array',
+            categoryarray=date_labels,
+            range=x_axis_range,
             showticklabels=False,
             showgrid=False,
             rangeslider=dict(visible=False)
@@ -440,9 +470,12 @@ with tab1:
             hovermode='x unified',
             height=100,
             template='plotly_white',
-            margin=dict(l=60, r=20, t=10, b=0),
+            margin=dict(l=60, r=common_chart_margin_r, t=10, b=0),
             xaxis=dict(
                 type='category',
+                categoryorder='array',
+                categoryarray=date_labels,
+                range=x_axis_range,
                 showticklabels=False,
                 showgrid=False
             )
@@ -496,15 +529,50 @@ with tab1:
         hovermode='x unified',
         height=300,
         template='plotly_white',
-        margin=dict(l=60, r=140, t=10, b=20),
+        margin=dict(l=60, r=common_chart_margin_r, t=10, b=20),
         xaxis=dict(
             type='category',
+            categoryorder='array',
+            categoryarray=date_labels,
+            range=x_axis_range,
             tickangle=-45,
             tickfont=dict(size=12),
         )
     )
     
     st.plotly_chart(fig_rsi, width='stretch')
+
+    # 신호 기준 가상 매매 수익률 계산 (종가 기준, 전액 매수/전액 매도)
+    initial_cash = 1_000_000
+    cash = initial_cash
+    shares = 0.0
+    buy_count = 0
+    sell_count = 0
+
+    for _, row in df.sort_values('Date').iterrows():
+        close_price = row['Close']
+        is_buy_signal = row['RSI_Change'] <= -rsi_diff_value
+        is_sell_signal = row['RSI_Change'] >= rsi_diff_value
+
+        if is_buy_signal and shares == 0:
+            shares = cash / close_price
+            cash = 0
+            buy_count += 1
+        elif is_sell_signal and shares > 0:
+            cash = shares * close_price
+            shares = 0
+            sell_count += 1
+
+    final_asset = cash + (shares * df['Close'].iloc[-1])
+    strategy_return = ((final_asset / initial_cash) - 1) * 100
+
+    st.markdown("#### 신호 기준 가상 매매 결과")
+    result_col1, result_col2 = st.columns(2)
+    with result_col1:
+        st.metric("수익률", f"{strategy_return:+.2f}%")
+    with result_col2:
+        st.metric("매수/매도 횟수", f"{buy_count} / {sell_count}")
+    st.caption("가정: 시작 금액 1,000,000원, 신호 발생일 종가 기준 전액 매수/전액 매도, 수수료와 환율 변동은 제외")
     
     # 메인 컨텐츠
     col1, col2, col3, col4 = st.columns(4)
