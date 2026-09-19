@@ -21,61 +21,93 @@ Streamlit 기반 웹 대시보드와 데이터 수집용 백엔드 모듈을 함
 |------|------|
 | `stock_dashboard.py` | Streamlit 웹 대시보드 메인 파일 |
 | `stock_fetcher.py` | Yahoo Finance 데이터 수집, RSI 계산, 종목 정보 조회 모듈 |
+| `app_db.py` | SQLite 저장소 (계정, 종목 목록, 개인 설정) |
+| `app_secret.py` | 민감 정보 암호화 모듈 (Fernet) |
 | `run_app.py` | Streamlit 앱 실행용 Python 엔트리포인트 |
+| `run_dashboard.sh` | macOS / Linux용 대시보드 실행 스크립트 |
 | `run_dashboard.bat` | Windows용 대시보드 실행 스크립트 |
 | `requirements.txt` | Python 의존성 목록 |
+| `stock_analyzer.db` | 실행 시 자동 생성되는 로컬 DB (커밋 대상 아님) |
+| `.secret.key` | 실행 시 자동 생성되는 암호화 키 (커밋 대상 아님) |
 
-## 설치
+## 실행
 
-### 1. 가상환경 생성 및 활성화
+### 가장 간단한 방법
+
+가상환경 생성, 라이브러리 설치, 대시보드 실행을 스크립트 하나가 처리합니다.
 
 ```bash
-python -m venv venv
-source venv/bin/activate
+./run_dashboard.sh          # macOS / Linux
 ```
-
-Windows에서는 다음 명령을 사용합니다.
 
 ```bat
-venv\Scripts\activate
+run_dashboard.bat           REM Windows
 ```
 
-### 2. 라이브러리 설치
+두 스크립트 모두 `.venv` 디렉터리를 사용합니다. `run_dashboard.sh`는 `requirements.txt`가 바뀐 경우에만 의존성을 다시 설치하므로 두 번째 실행부터는 바로 뜹니다.
+
+### 직접 실행하기
 
 ```bash
+python3 -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
+streamlit run stock_dashboard.py   # 또는 python run_app.py
 ```
 
-## 대시보드 실행
+## 계정 및 데이터 저장
 
-### macOS / Linux
+계정 정보와 개인 설정은 소스 코드가 아니라 실행 위치의 SQLite 파일(`stock_analyzer.db`)에 저장됩니다. 파일은 최초 실행 시 자동으로 생성됩니다.
+
+| 저장 대상 | 테이블 | 저장 방식 |
+|-----------|--------|-----------|
+| 비밀번호 | `users` | PBKDF2-HMAC-SHA256 해시 + 임의 솔트 (복호화 불가) |
+| 개인 설정 (기본 종목, RSI 설정) | `user_prefs` | Fernet(AES-128-CBC + HMAC) 암호화 |
+| 종목 목록 | `tickers` | 평문 (공개 정보) |
+| 앱 설정 (로그인 요구 여부 등) | `app_settings` | 평문 |
+
+비밀번호를 암호화가 아니라 해시로 저장하는 이유는, 로그인 검증에 원문이 필요하지 않기 때문입니다. 해시는 키가 유출돼도 원문을 되돌릴 수 없습니다.
+
+### 최초 비밀번호
+
+기본 계정은 `admin`이며, 최초 실행 시 비밀번호가 생성됩니다.
+
+- `STOCK_APP_PASSWORD` 환경변수가 있으면 그 값이 사용됩니다.
+- 없으면 `P@ssw0rd`가 사용되며, 사이드바에 변경 안내가 표시됩니다.
 
 ```bash
-streamlit run stock_dashboard.py
+STOCK_APP_PASSWORD='원하는비밀번호' ./run_dashboard.sh   # 최초 실행 시에만 반영됩니다
 ```
 
-또는 실행 엔트리포인트를 사용할 수 있습니다.
+비밀번호는 사이드바의 `🔐 계정 / 기본값 관리`에서 언제든 변경할 수 있습니다.
+
+### 로그인 화면 켜기
+
+기본값은 로그인을 거치지 않고 메인 화면을 바로 여는 것입니다. 로그인을 요구하려면 다음과 같이 설정합니다.
 
 ```bash
-python run_app.py
+python -c "import app_db; app_db.init_db(); app_db.set_login_required(True)"
 ```
 
-### Windows
+### 환경변수
 
-```bat
-run_dashboard.bat
-```
+| 변수 | 설명 |
+|------|------|
+| `STOCK_APP_DB` | DB 파일 경로를 직접 지정합니다. |
+| `STOCK_APP_SECRET_KEY` | 암호화 키를 직접 지정합니다. 지정하지 않으면 `.secret.key` 파일이 생성됩니다. |
+| `STOCK_APP_PASSWORD` | 최초 계정 생성 시의 비밀번호입니다. |
 
-`run_dashboard.bat`는 Python 설치 여부를 확인하고, 가상환경이 없으면 생성한 뒤 필요한 라이브러리를 설치하고 대시보드를 실행합니다.
+`stock_analyzer.db`와 `.secret.key`는 `.gitignore`에 포함되어 있습니다. 키 파일을 잃어버리면 암호화된 개인 설정은 복구할 수 없고, 기본값으로 되돌아갑니다.
 
 ## 대시보드 사용 방법
 
 1. 상단에서 분석할 연도와 월을 선택합니다.
 2. `RSI 차이값`과 `RSI 비교기간(일)`을 설정해 매수/매도 신호 기준을 조정합니다.
-3. 왼쪽 사이드바의 `주식 심볼 입력`에서 상위 100개 종목을 선택하거나 목록에 없는 티커를 직접 입력합니다.
+3. 왼쪽 사이드바의 `주식 심볼 입력`에서 종목을 선택하거나 목록에 없는 티커를 직접 입력합니다. 직접 입력한 티커는 DB에 저장되어 다음 실행부터 목록에 표시됩니다.
 4. RSI 과매수/과매도 기준값을 설정합니다. 기본값은 과매도 30, 과매수 70입니다.
 5. `주식 분석` 탭에서 캔들차트, 거래량, RSI, 신호 기준 가상 매매 결과, 주요 지표를 확인합니다.
 6. `데이터 테이블` 탭에서 상세 데이터를 확인하고 CSV로 다운로드합니다.
+7. 사이드바의 `🔐 계정 / 기본값 관리`에서 현재 설정을 기본값으로 저장하거나, 비밀번호를 변경합니다.
 
 ### RSI 신호 기준
 
@@ -199,7 +231,7 @@ print(info)
 
 - 데이터는 Yahoo Finance를 통해 조회되며, 일부 종목은 실시간이 아닌 지연 데이터일 수 있습니다.
 - Yahoo Finance는 비공식 API이므로 네트워크 상태나 서비스 응답에 따라 조회가 실패할 수 있습니다.
-- 대시보드의 로그인 화면 코드는 포함되어 있지만 현재 기본 설정은 인증을 통과한 상태로 시작하도록 되어 있습니다.
+- 대시보드의 로그인 화면은 기본적으로 꺼져 있습니다. DB의 `require_login` 설정으로 켤 수 있습니다.
 - 투자 판단은 본인의 책임이며, 이 프로젝트의 지표와 신호는 참고용입니다.
 
 ## 라이선스

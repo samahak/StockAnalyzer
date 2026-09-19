@@ -1,2 +1,14 @@
 __pycache__/
 *.py[cod]
+
+# 가상환경
+.venv/
+venv/
+
+# 로컬 데이터베이스와 암호화 키 (계정 정보·개인 설정 포함, 절대 커밋하지 말 것)
+*.db
+.secret.key
+
+# 테스트 실행 시 생성되는 파일
+aapl_data.csv
+.DS_Store

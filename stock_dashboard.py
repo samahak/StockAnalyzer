@@ -7,8 +7,23 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 from stock_fetcher import fetch_stock_daily, get_stock_info
+from app_db import (
+    DEFAULT_USERNAME,
+    add_ticker,
+    change_password,
+    get_db_path,
+    get_tickers,
+    get_user_prefs,
+    init_db,
+    is_login_required,
+    remove_ticker,
+    save_user_prefs,
+    uses_initial_password,
+    verify_password,
+)
 from datetime import datetime, timedelta
 import calendar
+import os
 import streamlit.components.v1 as components
 import numpy as np
 
@@ -20,12 +35,15 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-DEFAULT_AUTH = True
-DEFAULT_PASSWORD = "P@ssw0rd"  # 실제 배포 시에는 안전한 방식으로 관리하세요
+# 계정 정보와 개인 설정은 로컬 SQLite(stock_analyzer.db)에 저장한다. 자세한 내용은 app_db.py 참고.
+init_db()
+
+# 로그인 화면을 거칠지 여부는 DB의 require_login 설정으로 제어한다. (기본값 0 = 바로 메인 화면)
+REQUIRE_LOGIN = is_login_required()
 
 # 비밀번호 인증
 if 'authenticated' not in st.session_state:
-    st.session_state['authenticated'] = DEFAULT_AUTH
+    st.session_state['authenticated'] = not REQUIRE_LOGIN
 
 if not st.session_state['authenticated']:
     # 'Press enter to apply' 영문 안내 문구 숨김 CSS 적용
@@ -46,7 +64,7 @@ if not st.session_state['authenticated']:
             submit_button = st.form_submit_button("로그인", use_container_width=True)
             
             if submit_button:
-                if password == DEFAULT_PASSWORD:
+                if verify_password(DEFAULT_USERNAME, password):
                     st.session_state['authenticated'] = True
                     st.rerun()
                 else:
@@ -84,6 +102,9 @@ if not st.session_state['authenticated']:
                         """, height=0, width=0
                     )
     st.stop()
+
+# 저장된 개인 설정(암호화되어 DB에 보관) 로드 — 위젯 기본값으로 사용한다
+prefs = get_user_prefs()
 
 # 입력 상태 유지를 위한 딕셔너리 초기화
 if 'saved_state' not in st.session_state:
@@ -180,10 +201,10 @@ if 'ui_selected_month' not in st.session_state:
     st.session_state['ui_selected_month'] = latest_month
 
 if 'ui_rsi_diff_value' not in st.session_state:
-    st.session_state['ui_rsi_diff_value'] = 5
+    st.session_state['ui_rsi_diff_value'] = prefs['rsi_diff_value']
 
 if 'ui_rsi_diff_period' not in st.session_state:
-    st.session_state['ui_rsi_diff_period'] = 1
+    st.session_state['ui_rsi_diff_period'] = prefs['rsi_diff_period']
 
 with col1:
     selected_year = st.number_input(
@@ -243,23 +264,16 @@ st.markdown("---")
 with st.sidebar:
     st.header("⚙️ 설정")
 
-    top_100_symbols = [
-        "AAPL", "MSFT", "NVDA", "GOOGL", "AMZN", "META", "BRK-B", "LLY", "TSLA", "AVGO",
-        "JPM", "UNH", "V", "XOM", "JNJ", "MA", "PG", "HD", "COST", "MRK",
-        "ABBV", "CRM", "CVX", "AMD", "NFLX", "PEP", "KO", "BAC", "WMT", "TMO",
-        "LIN", "MCD", "ADBE", "DIS", "CSCO", "ACN", "ABT", "INTU", "QCOM", "WFC",
-        "DHR", "GE", "IBM", "CAT", "NOW", "TXN", "VZ", "AMGN", "COP", "PM",
-        "PFE", "ISRG", "SPGI", "BA", "UNP", "HON", "NKE", "SYK", "RTX", "GS",
-        "LOW", "PLD", "BKNG", "ELV", "MS", "T", "BLK", "DE", "INTC", "MDT",
-        "VRTX", "REGN", "AMT", "LMT", "ADP", "MMC", "CB", "PANW", "CI", "TMUS",
-        "BSX", "PGR", "SCHW", "ETN", "CMCSA", "C", "FI", "MU", "ZTS", "KLAC",
-        "NEE", "LRCX", "SNPS", "CDNS", "TJX", "WM", "SHW", "GD", "MO", "SO"
-    ]
-    popular_symbols = sorted(top_100_symbols)
+    # 종목 목록은 DB(tickers 테이블)에서 읽는다. 최초 실행 시 상위 100종목으로 채워진다.
+    symbol_options = sorted(get_tickers())
+
+    # 저장된 기본 종목이 목록에 있으면 초기 선택값으로 사용
+    if 'ui_symbol' not in st.session_state and prefs['symbol'] in symbol_options:
+        st.session_state['ui_symbol'] = prefs['symbol']
 
     selected_symbol = st.selectbox(
         "주식 심볼 입력",
-        popular_symbols,
+        symbol_options,
         help="목록에서 선택하거나, 목록에 없는 미국 주식 심볼을 직접 입력하세요.",
         key='ui_symbol',
         accept_new_options=True,
@@ -268,6 +282,9 @@ with st.sidebar:
 
     if selected_symbol and selected_symbol.strip():
         symbol = selected_symbol.strip().upper()
+        # 목록에 없던 티커를 직접 입력했다면 다음 실행부터 목록에 남도록 DB에 등록
+        if symbol not in symbol_options:
+            add_ticker(symbol)
     else:
         st.info("💡 조회할 미국 주식 심볼을 선택하거나 입력해주세요.")
         st.stop()
@@ -276,13 +293,54 @@ with st.sidebar:
     st.header("📊 RSI 매매 신호 설정")
     
     if 'ui_rsi_buy' not in st.session_state:
-        st.session_state['ui_rsi_buy'] = 30
-        
+        st.session_state['ui_rsi_buy'] = prefs['rsi_buy']
+
     if 'ui_rsi_sell' not in st.session_state:
-        st.session_state['ui_rsi_sell'] = 70
+        st.session_state['ui_rsi_sell'] = prefs['rsi_sell']
     
     rsi_buy_threshold = st.number_input("매수 RSI 기준 (이하 하락 시)", min_value=1, max_value=100, step=1, key='ui_rsi_buy')
     rsi_sell_threshold = st.number_input("매도 RSI 기준 (이상 상승 시)", min_value=1, max_value=100, step=1, key='ui_rsi_sell')
+
+    st.markdown("---")
+
+    with st.expander("🔐 계정 / 기본값 관리", expanded=False):
+        st.caption(f"저장 위치: {os.path.basename(get_db_path())} (개인 설정은 암호화되어 저장됩니다)")
+
+        if uses_initial_password():
+            st.warning("초기 비밀번호를 그대로 사용 중입니다. 아래에서 변경하세요.")
+
+        if st.button("💾 현재 설정을 기본값으로 저장", use_container_width=True,
+                     help="선택한 종목과 RSI 설정을 다음 실행 시 기본값으로 사용합니다."):
+            save_user_prefs({
+                'symbol': symbol,
+                'rsi_diff_value': int(rsi_diff_value),
+                'rsi_diff_period': int(rsi_diff_period),
+                'rsi_buy': int(rsi_buy_threshold),
+                'rsi_sell': int(rsi_sell_threshold),
+            })
+            st.success("기본값을 저장했습니다.")
+
+        if len(symbol_options) > 1:
+            if st.button(f"🗑️ 목록에서 '{symbol}' 제거", use_container_width=True,
+                         help="종목 목록에서만 숨깁니다. 다시 입력하면 복구됩니다."):
+                remove_ticker(symbol)
+                st.session_state.pop('ui_symbol', None)
+                st.rerun()
+
+        st.markdown("**비밀번호 변경**")
+        # 비밀번호 입력값에는 'ui_' 접두사를 쓰지 않는다.
+        # 'ui_'로 시작하는 키는 사용법 화면 전환 시 saved_state로 백업되므로, 평문 비밀번호가 남지 않도록 제외한다.
+        with st.form("password_form", clear_on_submit=True):
+            current_pw = st.text_input("현재 비밀번호", type="password", max_chars=64, key='pw_current')
+            new_pw = st.text_input("새 비밀번호", type="password", max_chars=64, key='pw_new')
+            confirm_pw = st.text_input("새 비밀번호 확인", type="password", max_chars=64, key='pw_confirm')
+
+            if st.form_submit_button("변경", use_container_width=True):
+                changed, message = change_password(DEFAULT_USERNAME, current_pw, new_pw, confirm_pw)
+                if changed:
+                    st.success(message)
+                else:
+                    st.error(message)
 
 # 데이터 로딩
 lookback_days = 45

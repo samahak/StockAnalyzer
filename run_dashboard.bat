@@ -17,14 +17,14 @@ if %errorlevel% neq 0 (
 )
 
 :: 가상환경 확인 및 생성
-if not exist "venv\Scripts\activate.bat" (
+if not exist ".venv\Scripts\activate.bat" (
     echo [1/3] 가상환경을 생성하는 중입니다... (최초 1회 조금 오래 걸릴 수 있습니다)
-    python -m venv venv
+    python -m venv .venv
 )
 
 :: 라이브러리 설치 및 앱 실행
 echo [2/3] 가상환경 활성화 및 필수 라이브러리 점검 중...
-call venv\Scripts\activate.bat
+call .venv\Scripts\activate.bat
 pip install -r requirements.txt --quiet
 
 echo [3/3] 대시보드를 실행합니다! (웹 브라우저가 자동으로 열립니다)
