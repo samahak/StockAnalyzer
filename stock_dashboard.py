@@ -35,6 +35,72 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# 사이드바 열기/접기 버튼 강조 CSS.
+# Streamlit 기본 버튼은 흐린 회색 아이콘(≫) 하나뿐이라 눈에 띄지 않는다.
+# 라벨을 붙이고 화살표가 오른쪽으로 밀리는 애니메이션을 줘서 "옆으로 열린다"는 것을 드러낸다.
+# 대상 요소는 Streamlit 1.58 기준이며, 버전을 올릴 때 data-testid 가 바뀌면 함께 확인할 것.
+st.markdown("""
+    <style>
+    /* 접힌 상태에서 헤더 왼쪽에 나타나는 '열기' 버튼 */
+    button[data-testid="stExpandSidebarButton"] {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 0.15rem;
+        padding: 0.3rem 0.6rem 0.3rem 0.75rem !important;
+        border-radius: 999px;
+        background: #ff4b4b;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
+        animation: sidebar-open-nudge 1.8s ease-in-out infinite;
+    }
+    button[data-testid="stExpandSidebarButton"]::before {
+        content: "설정 열기";
+        color: #ffffff;
+        font-size: 0.85rem;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+    /* 아이콘 색이 인라인 스타일로 지정되어 있어 !important 로 덮어쓴다 */
+    button[data-testid="stExpandSidebarButton"] [data-testid="stIconMaterial"] {
+        color: #ffffff !important;
+    }
+    button[data-testid="stExpandSidebarButton"]:hover {
+        background: #e03131;
+        animation: none;
+        transform: translateX(3px);
+    }
+
+    /* 열린 상태에서 사이드바 우측 상단의 '접기' 버튼.
+       기본값은 사이드바에 마우스를 올려야 보이는 visibility: hidden 이라 항상 보이도록 덮어쓴다. */
+    [data-testid="stSidebarCollapseButton"] {
+        visibility: visible !important;
+    }
+    button[data-testid="stSidebarCollapseButton"],
+    [data-testid="stSidebarCollapseButton"] button {
+        display: inline-flex !important;
+        align-items: center;
+        gap: 0.15rem;
+        padding: 0.2rem 0.6rem 0.2rem 0.45rem !important;
+        border-radius: 999px;
+        border: 1px solid rgba(128, 128, 128, 0.45);
+    }
+    [data-testid="stSidebarCollapseButton"] button::after {
+        content: "접기";
+        color: #888888;
+        font-size: 0.8rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    @keyframes sidebar-open-nudge {
+        0%, 100% { transform: translateX(0); }
+        50%      { transform: translateX(4px); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        button[data-testid="stExpandSidebarButton"] { animation: none; }
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # 계정 정보와 개인 설정은 로컬 SQLite(stock_analyzer.db)에 저장한다. 자세한 내용은 app_db.py 참고.
 init_db()
 
@@ -398,7 +464,22 @@ with tab1:
     date_labels = df['DateLabel'].tolist()
     x_axis_range = [-0.5, len(date_labels) - 0.5]
     common_chart_margin_r = 140
-    
+
+    # 차트 공통 스타일. 세 차트(캔들/거래량/RSI)가 한 벌로 보이도록 같은 값을 쓴다.
+    # 한국식 캔들 관례(상승 빨강/하락 파랑)를 유지하면서 채도만 낮춘 조합이다.
+    color_up = '#E03131'        # 상승
+    color_down = '#1C6DD0'      # 하락
+    fill_up = 'rgba(224, 49, 49, 0.85)'
+    fill_down = 'rgba(28, 109, 208, 0.85)'
+    color_grid = '#EDEDF0'      # 격자선: 배경보다 한 단계만 진하게
+    color_text = '#31333F'
+    chart_font = dict(size=12, color=color_text)
+    hover_style = dict(
+        bgcolor='rgba(255, 255, 255, 0.96)',
+        bordercolor=color_grid,
+        font=dict(size=12, color=color_text)
+    )
+
     # 캔들스틱 차트
     fig = go.Figure(data=[
         go.Candlestick(
@@ -407,8 +488,9 @@ with tab1:
             high=df['High'],
             low=df['Low'],
             close=df['Close'],
-            increasing=dict(line=dict(color='red'), fillcolor='rgba(255,0,0,0.5)'),
-            decreasing=dict(line=dict(color='blue'), fillcolor='rgba(0,0,255,0.5)'),
+            increasing=dict(line=dict(color=color_up, width=1.2), fillcolor=fill_up),
+            decreasing=dict(line=dict(color=color_down, width=1.2), fillcolor=fill_down),
+            whiskerwidth=0.15,
             name='캔들',
             hovertemplate='<b>%{x}</b><br>Open: %{open:.2f}<br>High: %{high:.2f}<br>Low: %{low:.2f}<br>Close: %{close:.2f}<extra></extra>'
         )
@@ -429,7 +511,7 @@ with tab1:
             x=normal_buy_signals['DateLabel'],
             y=normal_buy_signals['Low'] - (price_range * 0.03),
             mode='markers',
-            marker=dict(symbol='triangle-up', size=14, color='green', line=dict(width=1, color='darkgreen')),
+            marker=dict(symbol='triangle-up', size=13, color='#2F9E44', line=dict(width=1.5, color='white')),
             name='매수 신호',
             hovertemplate='<b>매수 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
             customdata=np.stack((normal_buy_signals['RSI'], normal_buy_signals['RSI_Change']), axis=-1)
@@ -449,7 +531,7 @@ with tab1:
             x=strong_buy_signals['DateLabel'],
             y=strong_buy_signals['Low'] - (price_range * 0.06),
             mode='markers',
-            marker=dict(symbol='triangle-up', size=22, color='#00C853', line=dict(width=3, color='black')),
+            marker=dict(symbol='triangle-up', size=20, color='#2B8A3E', line=dict(width=2, color='white')),
             name='강한 매수 신호',
             hovertemplate='<b>강한 매수 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
             customdata=np.stack((strong_buy_signals['RSI'], strong_buy_signals['RSI_Change']), axis=-1)
@@ -461,7 +543,7 @@ with tab1:
             x=normal_sell_signals['DateLabel'],
             y=normal_sell_signals['High'] + (price_range * 0.03),
             mode='markers',
-            marker=dict(symbol='triangle-down', size=14, color='dimgray', line=dict(width=1, color='black')),
+            marker=dict(symbol='triangle-down', size=13, color='#495057', line=dict(width=1.5, color='white')),
             name='매도 신호',
             hovertemplate='<b>매도 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
             customdata=np.stack((normal_sell_signals['RSI'], normal_sell_signals['RSI_Change']), axis=-1)
@@ -481,20 +563,49 @@ with tab1:
             x=strong_sell_signals['DateLabel'],
             y=strong_sell_signals['High'] + (price_range * 0.06),
             mode='markers',
-            marker=dict(symbol='triangle-down', size=22, color='#FF1744', line=dict(width=3, color='black')),
+            marker=dict(symbol='triangle-down', size=20, color='#C92A2A', line=dict(width=2, color='white')),
             name='강한 매도 신호',
             hovertemplate='<b>강한 매도 신호</b><br>RSI: %{customdata[0]:.2f}<br>RSI 변동: %{customdata[1]:+.2f}<extra></extra>',
             customdata=np.stack((strong_sell_signals['RSI'], strong_sell_signals['RSI_Change']), axis=-1)
         ))
     
+    # 마지막 종가는 오른쪽 여백(common_chart_margin_r)에 직접 라벨로 표시한다.
+    last_close = df['Close'].iloc[-1]
+    last_color = color_up if last_close >= df['Open'].iloc[-1] else color_down
+    fig.add_hline(y=last_close, line_dash='dot', line_width=1,
+                  line_color='rgba(49, 51, 63, 0.35)')
+    fig.add_annotation(
+        x=1.02, xref='paper', y=last_close, yref='y',
+        text=f"종가 ${last_close:,.2f}",
+        showarrow=False, xanchor='left',
+        font=dict(size=13, color=last_color)
+    )
+
     fig.update_layout(
-        title=f"{symbol} 일별 캔들차트",
-        yaxis_title="가격 ($)",
-        yaxis=dict(range=[y_min, y_max]),
+        title=dict(text=f"{symbol} 일별 캔들차트", x=0, xanchor='left',
+                   font=dict(size=18, color=color_text)),
+        yaxis=dict(
+            range=[y_min, y_max],
+            title=dict(text="가격", font=dict(size=13, color=color_text)),
+            tickprefix='$',
+            gridcolor=color_grid,
+            zeroline=False,
+            showline=False
+        ),
         hovermode='x unified',
+        hoverlabel=hover_style,
+        font=chart_font,
         height=420,
         template='plotly_white',
-        margin=dict(l=60, r=common_chart_margin_r, t=40, b=0),
+        plot_bgcolor='white',
+        paper_bgcolor='white',
+        # 범례를 위쪽 가로줄로 빼서 오른쪽 여백을 종가 라벨에 내준다.
+        # 좌우 여백(l/r)은 세 차트 정렬 기준이라 건드리지 않는다.
+        legend=dict(
+            orientation='h', yanchor='bottom', y=1.02, xanchor='right', x=1,
+            bgcolor='rgba(0,0,0,0)', font=dict(size=11, color=color_text)
+        ),
+        margin=dict(l=60, r=common_chart_margin_r, t=70, b=0),
         xaxis=dict(
             type='category',
             categoryorder='array',
@@ -502,6 +613,7 @@ with tab1:
             range=x_axis_range,
             showticklabels=False,
             showgrid=False,
+            showline=False,
             rangeslider=dict(visible=False)
         )
     )
@@ -514,20 +626,37 @@ with tab1:
     df_vol = df_vol[df_vol['Volume'] > 0]
 
     if not df_vol.empty:
+        # 막대 색을 그날 캔들 방향(종가 >= 시가)에 맞춰서 위 차트와 눈으로 이어지게 한다.
+        vol_up = df_vol['Close'] >= df_vol['Open']
+        vol_colors = np.where(vol_up, 'rgba(224, 49, 49, 0.55)', 'rgba(28, 109, 208, 0.55)')
+
         fig_vol = go.Figure()
         fig_vol.add_trace(go.Bar(
             x=df_vol['DateLabel'],
             y=df_vol['Volume'],
-            marker_color='royalblue',
+            marker=dict(color=vol_colors, line=dict(width=0)),
             name='거래량',
             hovertemplate='거래량: %{y:,.0f}<extra></extra>'
         ))
         fig_vol.update_layout(
             title='',
-            yaxis_title="거래량",
+            bargap=0.3,
+            yaxis=dict(
+                title=dict(text="거래량", font=dict(size=13, color=color_text)),
+                tickformat='~s',
+                nticks=3,
+                gridcolor=color_grid,
+                zeroline=False,
+                showline=False
+            ),
             hovermode='x unified',
-            height=100,
+            hoverlabel=hover_style,
+            font=chart_font,
+            height=130,
             template='plotly_white',
+            plot_bgcolor='white',
+            paper_bgcolor='white',
+            showlegend=False,
             margin=dict(l=60, r=common_chart_margin_r, t=10, b=0),
             xaxis=dict(
                 type='category',
@@ -535,7 +664,8 @@ with tab1:
                 categoryarray=date_labels,
                 range=x_axis_range,
                 showticklabels=False,
-                showgrid=False
+                showgrid=False,
+                showline=False
             )
         )
         st.plotly_chart(fig_vol, width='stretch')
@@ -552,20 +682,20 @@ with tab1:
         y=df['RSI'],
         mode='lines',
         name='RSI (14)',
-        line=dict(color='#FF6B6B', width=2),
+        line=dict(color='#7048E8', width=2),
         hovertemplate='RSI: %{y:.2f}<extra></extra>'
     ))
     
     # 매도 기준선
-    fig_rsi.add_hline(y=rsi_sell_threshold, line_dash="dash", line_color="red", 
+    fig_rsi.add_hline(y=rsi_sell_threshold, line_dash="dash", line_width=1, line_color=color_up, 
                       annotation_text=f"과매수 ({rsi_sell_threshold})", annotation_position="right")
     
     # 매수 기준선
-    fig_rsi.add_hline(y=rsi_buy_threshold, line_dash="dash", line_color="blue",
+    fig_rsi.add_hline(y=rsi_buy_threshold, line_dash="dash", line_width=1, line_color=color_down,
                       annotation_text=f"과매도 ({rsi_buy_threshold})", annotation_position="right")
     
     # 중간선 (50)
-    fig_rsi.add_hline(y=50, line_dash="dot", line_color="gray",
+    fig_rsi.add_hline(y=50, line_dash="dot", line_width=1, line_color="rgba(49, 51, 63, 0.35)",
                       annotation_text="중간값 (50)", annotation_position="right")
     
     fig_rsi.add_annotation(
@@ -576,17 +706,28 @@ with tab1:
         text=f"RSI값 {current_rsi:.2f}",
         showarrow=False,
         xanchor='left',
-        font=dict(size=14, color='black')
+        font=dict(size=14, color=color_text)
     )
     
     fig_rsi.update_layout(
         title='',
         xaxis_title="날짜",
         yaxis_title="RSI",
-        yaxis=dict(range=[0, 100], tickfont=dict(size=12), title=dict(font=dict(size=14))),
+        yaxis=dict(
+            range=[0, 100],
+            tickfont=dict(size=12),
+            title=dict(font=dict(size=13, color=color_text)),
+            gridcolor=color_grid,
+            zeroline=False,
+            showline=False
+        ),
         hovermode='x unified',
+        hoverlabel=hover_style,
+        font=chart_font,
         height=300,
         template='plotly_white',
+        plot_bgcolor='white',
+        paper_bgcolor='white',
         margin=dict(l=60, r=common_chart_margin_r, t=10, b=20),
         xaxis=dict(
             type='category',
@@ -595,6 +736,8 @@ with tab1:
             range=x_axis_range,
             tickangle=-45,
             tickfont=dict(size=12),
+            showgrid=False,
+            showline=False
         )
     )
     

@@ -7,6 +7,7 @@ cd "$(dirname "$0")"
 
 VENV_DIR=".venv"
 REQ_STAMP="$VENV_DIR/.requirements.sha"
+PORT=8503
 
 echo "=========================================="
 echo "   📈 주식 데이터 대시보드 실행 스크립트"
@@ -35,8 +36,9 @@ else
     echo "[2/3] 라이브러리가 최신 상태입니다."
 fi
 
-# 4) 실행
+# 4) 실행 (포트는 8503 고정)
 echo "[3/3] 대시보드를 실행합니다! (웹 브라우저가 자동으로 열립니다)"
+echo "👉 주소: http://localhost:$PORT"
 echo "💡 종료하시려면 이 터미널에서 Ctrl+C 를 누르세요."
 echo
-exec "$VENV_DIR/bin/streamlit" run stock_dashboard.py
+exec "$VENV_DIR/bin/streamlit" run stock_dashboard.py --server.port "$PORT"
